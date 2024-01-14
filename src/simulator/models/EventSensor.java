@@ -26,7 +26,7 @@ public class EventSensor {
 
     // getSensor
     public Sensor getSensor() {
-        return this.sensor;
+        return sensor;
     }
 
 }

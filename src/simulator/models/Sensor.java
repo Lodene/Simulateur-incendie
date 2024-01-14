@@ -1,11 +1,10 @@
 package simulator.models;
 
 import java.sql.Timestamp;
+import java.util.List;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class Sensor {
     @JsonProperty("id")
     private long id;
@@ -17,18 +16,20 @@ public class Sensor {
     private double latitude;
     @JsonProperty("created_at")
     private Timestamp created_at;
-    @JsonProperty("event")
-    private Event event;
+    @JsonProperty("events")
+    private List<EventSensor> events;
 
     public Sensor() {
     }
 
-    public Sensor(long id, int intensity, double longitude, double latitude, Timestamp created_at) {
+    public Sensor(long id, int intensity, double longitude, double latitude, Timestamp created_at,
+            List<EventSensor> events) {
         this.id = id;
         this.intensity = intensity;
         this.longitude = longitude;
         this.latitude = latitude;
         this.created_at = created_at;
+        this.events = events;
     }
 
     public long getId() {

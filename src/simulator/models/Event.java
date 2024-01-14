@@ -28,15 +28,6 @@ public class Event {
         this.sensors = sensors;
     }
 
-    public String toString() {
-        return "Event{" +
-                "id=" + id +
-                ", is_over=" + is_over +
-                ", created_at=" + created_at +
-                ", sensors=" + sensors +
-                '}';
-    }
-
     // Getters et setters
     public long getId() {
         return id;

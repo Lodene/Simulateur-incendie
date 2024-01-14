@@ -1,3 +1,4 @@
+import simulator.models.ApiClient;
 import simulator.models.Event;
 import simulator.models.EventSensor;
 import simulator.models.Sensor;
@@ -31,10 +32,12 @@ public class App {
     private static final String EVENT_API_REEL_URL_PUT_UPDATE_SENSORS = "http://localhost:3000/api/sensor";
     private static final String EVENT_API_REEL_URL_GET_EVENT_OFF = "http://localhost:3000/api/event/tostop";
     private static final String EVENT_API_REEL_URL_GET_EVENT_SENSOR = "http://localhost:3000/api/sensor?id=";
+    private static final String EVENT_API_REEL_URL_GET_CAMIONS_SUR_PLACE = "http://localhost:3000/api/event/vehicle?eventId=";
     private static final String EVENT_API_SIMU_URL_GET_EVENT_OFF = "http://localhost:3001/api/event/tostop";
-    private static Integer a = 1;
+    private static ApiClient apiClient;
 
     public static void main(String[] args) throws IOException {
+        System.out.println("Simu is running");
 
         ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
@@ -47,21 +50,19 @@ public class App {
                  */
                 List<Event> events_to_off = fetchData(EVENT_API_REEL_URL_GET_EVENT_OFF,
                         Event[].class);
-                System.err.println("Coté Reel\n\n\n");
                 for (Event event : events_to_off) {
-                    System.err.println(event.getId());
+                    System.out.println(event.getId());
                     String data = "{ \"event\": " + event.getId() + " }";
-                    System.err.println(data);
+                    System.out.println(data);
                     putDataEvent(EVENT_API_REEL_URL_GET_EVENT_OFF, data, Event.class);
                 }
 
                 List<Event> events_simu_to_off = fetchData(EVENT_API_SIMU_URL_GET_EVENT_OFF,
                         Event[].class);
-                System.err.println("Coté SImu\n\n\n");
                 for (Event event : events_simu_to_off) {
-                    System.err.println(event.getId());
+                    System.out.println(event.getId());
                     String data = "{ \"event\": " + event.getId() + " }";
-                    System.err.println(data);
+                    System.out.println(data);
                     putDataEvent(EVENT_API_SIMU_URL_GET_EVENT_OFF, data, Event.class);
                 }
             }
@@ -79,20 +80,25 @@ public class App {
                         Sensor[].class);
                 for (Sensor sensor : sensors) {
                     if (sensor.getIntensity() != 0) {
-                        List<Event> event_sensor = fetchData(EVENT_API_REEL_URL_GET_EVENT_SENSOR + sensor.getId(),
-                                Event[].class);
+                        System.out.println("test : " + sensor.getId());
+                        Sensor event = apiClient.getSingle("http://localhost:3000/api/sensor?id=" + sensor.getId(),
+                                Sensor.class);
+                        System.out.println(event.getId());
+                        System.out.println("ouou");
+
                         Integer intensite = 0;
                         // if (si des pompiers sont sur place){
                         // intensite = sensor.getIntensity() - 1;
                         // } else {
                         // intensite = sensor.getIntensity() + 1;
                         // }
-                        System.err.println(sensor.getId());
+                        // System.out.println(sensor.getId());
                         String data = "{ \"sensor\" : { \"id\": " + sensor.getId() + ", \"intensity\":" + intensite
                                 + " } }";
-                        Sensor updatedSensor = putDataSensor(EVENT_API_REEL_URL_PUT_UPDATE_SENSORS, data,
-                                Sensor.class);
-                        System.err.println(updatedSensor);
+                        // Sensor updatedSensor = putDataSensor(EVENT_API_REEL_URL_PUT_UPDATE_SENSORS,
+                        // data,
+                        // Sensor.class);
+                        // System.out.println(updatedSensor);
                     }
                 }
             }
@@ -105,9 +111,10 @@ public class App {
         };
 
         // Exécuter la tâche toutes les 10 secondes après un délai initial de 0 seconde
-        scheduler.scheduleAtFixedRate(put_off_event, 0, 1, TimeUnit.SECONDS);
+        // scheduler.scheduleAtFixedRate(put_off_event, 0, 1, TimeUnit.SECONDS);
         scheduler.scheduleAtFixedRate(incremente_decrement_sensor, 0, 10, TimeUnit.SECONDS);
-        scheduler.scheduleAtFixedRate(vehicle_pompier_vers_feu, 0, 1, TimeUnit.SECONDS);
+        // scheduler.scheduleAtFixedRate(vehicle_pompier_vers_feu, 0, 1,
+        // TimeUnit.SECONDS);
 
     }
 
