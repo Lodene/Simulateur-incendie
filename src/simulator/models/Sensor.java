@@ -1,75 +1,79 @@
 package simulator.models;
 
-import java.sql.Time;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.sql.Timestamp;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Sensor {
-    private static int nextId = 1;
-    private int id;
-    private float longitude;
-    private float latitude;
+    @JsonProperty("id")
+    private long id;
+    @JsonProperty("intensity")
     private int intensity;
-    private int sleep;
+    @JsonProperty("longitude")
+    private double longitude;
+    @JsonProperty("latitude")
+    private double latitude;
+    @JsonProperty("created_at")
+    private Timestamp created_at;
+    @JsonProperty("event")
+    private Event event;
 
-    public Sensor(float longitude, float latitude, int intensity) {
-        this.id = generateUniqueId();
-        this.longitude = longitude;
-        this.latitude = latitude;
+    public Sensor() {
+    }
+
+    public Sensor(long id, int intensity, double longitude, double latitude, Timestamp created_at) {
+        this.id = id;
         this.intensity = intensity;
-        this.sleep = 0;
-    }
-
-    public String toString() {
-        return "Sensor{" +
-                "id=" + id +
-                ", longitude=" + longitude +
-                ", latitude=" + latitude +
-                ", intensity=" + intensity +
-                '}';
-    }
-
-    private synchronized int generateUniqueId() {
-        return nextId++;
-    }
-
-    public int getId() {
-        return id;
-    }
-
-    // Getter et Setter pour longitude
-    public float getLongitude() {
-        return longitude;
-    }
-
-    public void setLongitude(float longitude) {
         this.longitude = longitude;
-    }
-
-    // Getter et Setter pour latitude
-    public float getLatitude() {
-        return latitude;
-    }
-
-    public void setLatitude(float latitude) {
         this.latitude = latitude;
+        this.created_at = created_at;
     }
 
-    // Getter et Setter pour intensity
+    public long getId() {
+        return this.id;
+    }
+
+    public void setId(long id) {
+        this.id = id;
+    }
+
     public int getIntensity() {
-        return intensity;
+        return this.intensity;
     }
 
     public void setIntensity(int intensity) {
         this.intensity = intensity;
     }
 
-    // Getter et Setter pour sleep
-    public int getSleep() {
-        return sleep;
+    public double getLongitude() {
+        return this.longitude;
     }
 
-    public void setSleep(int sleep) {
-        this.sleep = sleep;
+    public void setLongitude(double longitude) {
+        this.longitude = longitude;
+    }
+
+    public double getLatitude() {
+        return this.latitude;
+    }
+
+    public void setLatitude(double latitude) {
+        this.latitude = latitude;
+    }
+
+    public Timestamp getCreatedAt() {
+        return this.created_at;
+    }
+
+    public void setCreatedAt(Timestamp created_at) {
+        this.created_at = created_at;
+    }
+
+    // getter to return latitude and longitude
+    public double[] getCoordinates() {
+        double[] coordinates = { this.latitude, this.longitude };
+        return coordinates;
     }
 }
