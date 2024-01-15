@@ -18,6 +18,18 @@ public class EventVehicle {
     @JsonProperty("event")
     private Event event;
 
+    @Override
+    public String toString() {
+        return "EventVehicle{" +
+                "id=" + id +
+                ", event_id=" + event_id +
+                ", vehicle_id=" + vehicle_id +
+                ", on_site=" + on_site +
+                ", created_at=" + created_at +
+                ", event=" + (event == null ? "null" : event.toString()) +
+                '}';
+    }
+
     public EventVehicle() {
     }
 

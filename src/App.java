@@ -1,13 +1,20 @@
 import simulator.models.ApiClient;
 import simulator.models.Event;
 import simulator.models.EventSensor;
+import simulator.models.EventVehicle;
+import simulator.models.RouteSegment;
 import simulator.models.Sensor;
+import simulator.models.Vehicle;
+import simulator.models.VehicleReturnTask;
+import simulator.models.VehicleTask;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.io.BufferedReader;
 import java.io.File;
@@ -21,100 +28,293 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 public class App {
+    public ApiClient apiClient = new ApiClient();
+    private static List<Integer> processingActiveVehicles = new ArrayList<>();
+    private static List<Integer> processingReturnVehicles = new ArrayList<>();
 
-    private static final String EVENT_API_REEL_URL_GET_SENSORS_ON = "http://localhost:3000/api/sensor/active";
-    private static final String EVENT_API_REEL_URL_PUT_UPDATE_SENSORS = "http://localhost:3000/api/sensor";
-    private static final String EVENT_API_REEL_URL_GET_EVENT_OFF = "http://localhost:3000/api/event/tostop";
-    private static final String EVENT_API_REEL_URL_GET_EVENT_SENSOR = "http://localhost:3000/api/sensor?id=";
-    private static final String EVENT_API_REEL_URL_GET_CAMIONS_SUR_PLACE = "http://localhost:3000/api/event/vehicle?eventId=";
-    private static final String EVENT_API_SIMU_URL_GET_EVENT_OFF = "http://localhost:3001/api/event/tostop";
-    private static ApiClient apiClient;
-
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, InterruptedException {
         System.out.println("Simu is running");
 
         ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
-        Runnable put_off_event = new Runnable() {
+        Runnable come_back = new Runnable() {
+            public ApiClient apiClient = new ApiClient();
+
             public void run() {
-                /*
-                 * 
-                 * On éteints les events qui doivent etre etient
-                 * 
-                 */
-                List<Event> events_to_off = fetchData(EVENT_API_REEL_URL_GET_EVENT_OFF,
-                        Event[].class);
-                for (Event event : events_to_off) {
-                    System.out.println(event.getId());
-                    String data = "{ \"event\": " + event.getId() + " }";
-                    System.out.println(data);
-                    putDataEvent(EVENT_API_REEL_URL_GET_EVENT_OFF, data, Event.class);
-                }
+                String apiResponse = fetchApiResponse("http://localhost:3000/api/vehicle/toreturn");
+                if (apiResponse != null) {
+                    try {
+                        ObjectMapper mapper = new ObjectMapper();
+                        JsonNode rootNode = mapper.readTree(apiResponse);
+                        List<JsonNode> vehiclesData = new ArrayList<>();
 
-                List<Event> events_simu_to_off = fetchData(EVENT_API_SIMU_URL_GET_EVENT_OFF,
-                        Event[].class);
-                for (Event event : events_simu_to_off) {
-                    System.out.println(event.getId());
-                    String data = "{ \"event\": " + event.getId() + " }";
-                    System.out.println(data);
-                    putDataEvent(EVENT_API_SIMU_URL_GET_EVENT_OFF, data, Event.class);
-                }
-            }
-        };
+                        for (JsonNode node : rootNode) {
+                            vehiclesData.add(node);
+                        }
 
-        Runnable incremente_decrement_sensor = new Runnable() { // Eteint les feux qui doivent etre eteint et incrémente
-                                                                // l'intensité toutes les 10s
-            public void run() {
-                /*
-                 * 
-                 * On incrémente maitenant les feux allumé au bout des 10 secondes
-                 * 
-                 */
-                List<Sensor> sensors = fetchData(EVENT_API_REEL_URL_GET_SENSORS_ON,
-                        Sensor[].class);
-                for (Sensor sensor : sensors) {
-                    if (sensor.getIntensity() != 0) {
-                        System.out.println("test : " + sensor.getId());
-                        Sensor event = apiClient.getSingle("http://localhost:3000/api/sensor?id=" + sensor.getId(),
-                                Sensor.class);
-                        System.out.println(event.getId());
-                        System.out.println("ouou");
+                        System.out.println(vehiclesData.size());
+                        // Lancement des threads pour chaque véhicule
+                        for (JsonNode vehicleData : vehiclesData) {
+                            try {
+                                JsonNode vehicleIdNode = vehicleData.get("vehicle_id");
+                                JsonNode id_pivot = vehicleData.get("pivot_event_vehicle_id");
+                                int vehicleId = vehicleIdNode.asInt();
 
-                        Integer intensite = 0;
-                        // if (si des pompiers sont sur place){
-                        // intensite = sensor.getIntensity() - 1;
-                        // } else {
-                        // intensite = sensor.getIntensity() + 1;
-                        // }
-                        // System.out.println(sensor.getId());
-                        String data = "{ \"sensor\" : { \"id\": " + sensor.getId() + ", \"intensity\":" + intensite
-                                + " } }";
-                        // Sensor updatedSensor = putDataSensor(EVENT_API_REEL_URL_PUT_UPDATE_SENSORS,
-                        // data,
-                        // Sensor.class);
-                        // System.out.println(updatedSensor);
+                                if (!processingReturnVehicles.contains(vehicleId)) {
+
+                                    int pivotId = id_pivot.asInt();
+                                    JsonNode routeProperties = vehicleData.get("routeProperties");
+
+                                    System.out.println("Vehicle ID: " + vehicleId);
+
+                                    for (JsonNode routeNode : routeProperties) {
+                                        JsonNode coordinates = routeNode.get("coordinates");
+                                        double duration = routeNode.get("duration").asDouble();
+                                        double sizeOfCoordinates = coordinates.size();
+                                        double pauseDouble = (duration / sizeOfCoordinates) * 1000;
+                                        long pause = (long) pauseDouble; // Convertir en long
+
+                                        System.out.println("  Segment Duration: " + duration);
+                                        System.out.print("  Coordinates: ");
+                                        for (JsonNode coordinatePair : coordinates) {
+                                            Vehicle stop = apiClient.getSingle(
+                                                    "http://localhost:3000/api/vehicle/isbusy?id=" + vehicleId,
+                                                    Vehicle.class);
+                                            System.out.println(stop);
+                                            double longitude = coordinatePair.get(0).asDouble();
+                                            double latitude = coordinatePair.get(1).asDouble();
+                                            System.out.print("[" + longitude + ", " + latitude + "] ");
+
+                                            ObjectMapper objectMapper = new ObjectMapper();
+                                            ObjectNode sensorNode = objectMapper.createObjectNode();
+                                            sensorNode.put("id", vehicleId);
+                                            sensorNode.put("longitude", longitude);
+                                            sensorNode.put("latitude", latitude);
+                                            System.out.println(sensorNode);
+                                            Vehicle reponse = apiClient.Put("http://localhost:3000/api/vehicle",
+                                                    sensorNode,
+                                                    Vehicle.class);
+                                            System.out.println("Update vehicule " + vehicleId);
+                                            Thread.sleep(pause);
+                                        }
+                                        System.out.println();
+                                        System.out.println("    Temps de pause : " + pause);
+                                    }
+                                    System.out.println("\n Véhicule arrivé");
+
+                                    ObjectMapper objectMapper = new ObjectMapper();
+                                    ObjectNode data = objectMapper.createObjectNode();
+                                    data.put("vehicle_on_event_id", pivotId);
+                                    System.out.println(data);
+                                    EventVehicle apiResponseTwo = apiClient.Put(
+                                            "http://localhost:3000/api/vehicle/event/arrived", data,
+                                            EventVehicle.class);
+                                    System.out.println(apiResponseTwo.toString());
+                                }
+
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        }
+
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
                 }
             }
         };
 
-        Runnable vehicle_pompier_vers_feu = new Runnable() {
+        Runnable put_off_event = new Runnable() {
             public void run() {
+                String apiResponse = fetchApiResponse("http://localhost:3000/api/event/tostop");
+                System.out.println("coté reel : " + apiResponse);
+                String apiResponsesimu = fetchApiResponse("http://localhost:3001/api/event/tostop");
+                System.out.println("coté simu : " + apiResponsesimu);
+            }
+        };
 
+        Runnable incrementSensorIntensity = new Runnable() {
+            public ApiClient apiClient = new ApiClient();
+
+            public void run() {
+                List<Event> events = apiClient.getList("http://localhost:3001/api/event", Event[].class);
+                for (Event event : events) {
+                    Integer vehicle_count = returnInt(
+                            "http://localhost:3000/api/event/vehicle?eventId=" + event.getId());
+                    for (EventSensor eventSensor : event.getSensors()) {
+                        Sensor sensor = eventSensor.getSensor();
+
+                        if (sensor.getIntensity() < 9) {
+                            if (vehicle_count == 0 || sensor.getIntensity() > 4 && vehicle_count == 2) {
+                                sensor.setIntensity(sensor.getIntensity() + 1);
+
+                                // Créer l'objet JSON pour ce capteur spécifique
+                                ObjectMapper objectMapper = new ObjectMapper();
+                                ObjectNode sensorNode = objectMapper.createObjectNode();
+                                sensorNode.put("id", sensor.getId());
+                                sensorNode.put("intensity", sensor.getIntensity());
+
+                                ObjectNode json = objectMapper.createObjectNode();
+                                json.set("sensor", sensorNode);
+                                // Mettre à jour le capteur via l'API
+                                Sensor updatedSensor = apiClient.Put("http://localhost:3001/api/sensor", json,
+                                        Sensor.class);
+
+                                // Afficher la confirmation de la mise à jour
+                                System.out.println("L'intensité du sensor " + updatedSensor.getId()
+                                        + " a été augmentée à " + updatedSensor.getIntensity());
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        Runnable decrementSensorIntensity = new Runnable() {
+            public ApiClient apiClient = new ApiClient();
+
+            public void run() {
+                List<Event> events = apiClient.getList("http://localhost:3001/api/event", Event[].class);
+                for (Event event : events) {
+                    Integer vehicle_count = returnInt(
+                            "http://localhost:3000/api/event/vehicle?eventId=" + event.getId());
+
+                    for (EventSensor eventSensor : event.getSensors()) {
+                        Sensor sensor = eventSensor.getSensor();
+
+                        if (sensor.getIntensity() > 0) {
+                            if (vehicle_count == 2 || sensor.getIntensity() < 5 && vehicle_count == 1) {
+                                sensor.setIntensity(sensor.getIntensity() - 1);
+                                // Créer l'objet JSON pour ce capteur spécifique
+                                ObjectMapper objectMapper = new ObjectMapper();
+                                ObjectNode sensorNode = objectMapper.createObjectNode();
+                                sensorNode.put("id", sensor.getId());
+                                sensorNode.put("intensity", sensor.getIntensity());
+
+                                ObjectNode json = objectMapper.createObjectNode();
+                                json.set("sensor", sensorNode);
+                                // Mettre à jour le capteur via l'API
+                                Sensor updatedSensor = apiClient.Put("http://localhost:3001/api/sensor", json,
+                                        Sensor.class);
+                                if (sensor.getIntensity() == 0) {
+                                    Sensor updatedRealSensor = apiClient.Put("http://localhost:3000/api/sensor", json,
+                                            Sensor.class);
+                                }
+
+                                // Afficher la confirmation de la mise à jour
+                                System.out
+                                        .println("L'intensité du sensor " + updatedSensor.getId() + " a été diminuée à "
+                                                + updatedSensor.getIntensity());
+
+                            }
+                        }
+                    }
+                }
             }
         };
 
         // Exécuter la tâche toutes les 10 secondes après un délai initial de 0 seconde
-        // scheduler.scheduleAtFixedRate(put_off_event, 0, 1, TimeUnit.SECONDS);
-        scheduler.scheduleAtFixedRate(incremente_decrement_sensor, 0, 10, TimeUnit.SECONDS);
-        // scheduler.scheduleAtFixedRate(vehicle_pompier_vers_feu, 0, 1,
-        // TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(put_off_event, 0, 5, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(decrementSensorIntensity, 0, 5,
+                TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(incrementSensorIntensity, 0, 20,
+                TimeUnit.SECONDS);
+        // scheduler.scheduleAtFixedRate(come_back, 0, 5, TimeUnit.SECONDS);
+
+        while (true) {
+            /*
+             * 
+             * Envoie les véhicules sur intervention
+             * 
+             */
+            String apiResponse = fetchApiResponse("http://localhost:3000/api/vehicle/event");
+
+            // System.out.println(apiResponse);
+            if (apiResponse != null) {
+                try {
+                    ObjectMapper mapper = new ObjectMapper();
+                    JsonNode rootNode = mapper.readTree(apiResponse);
+                    List<JsonNode> vehiclesData = new ArrayList<>();
+
+                    for (JsonNode node : rootNode) {
+                        vehiclesData.add(node);
+                    }
+
+                    // System.out.println(vehiclesData.size());
+                    // Lancement des threads pour chaque véhicule
+                    for (JsonNode vehicleData : vehiclesData) {
+                        Integer vehicleId = vehicleData.get("vehicle_id").asInt();
+
+                        if (!processingActiveVehicles.contains(vehicleId)) {
+                            processingActiveVehicles.add(vehicleId);
+
+                            Thread vehicleThread = new Thread(() -> {
+                                try {
+                                    VehicleTask vehicleTask = new VehicleTask(vehicleData);
+                                    vehicleTask.run(); // Exécuter la tâche du véhicule
+                                } finally {
+                                    // Ce bloc s'exécutera après la fin de toutes les opérations dans run()
+                                    System.out.println("Fin du thread");
+                                    processingActiveVehicles.remove(vehicleId);
+                                }
+                            });
+                            vehicleThread.start();
+                        }
+                    }
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
+            String apiResponseTwo = fetchApiResponse("http://localhost:3000/api/vehicle/toreturn");
+            if (apiResponseTwo != null) {
+                try {
+                    ObjectMapper mapper = new ObjectMapper();
+                    JsonNode rootNode = mapper.readTree(apiResponseTwo);
+                    List<JsonNode> vehiclesData = new ArrayList<>();
+
+                    for (JsonNode node : rootNode) {
+                        vehiclesData.add(node);
+                    }
+
+                    System.out.println(vehiclesData.size());
+                    // Lancement des threads pour chaque véhicule
+                    for (JsonNode vehicleData : vehiclesData) {
+                        Integer vehicleId = vehicleData.get("vehicle_id").asInt();
+
+                        if (!processingReturnVehicles.contains(vehicleId)) {
+                            processingReturnVehicles.add(vehicleId);
+
+                            Thread vehicleThread = new Thread(() -> {
+                                try {
+                                    VehicleReturnTask vehicleTask = new VehicleReturnTask(vehicleData);
+                                    vehicleTask.run(); // Exécute la tâche du véhicule
+                                } finally {
+                                    // Bloc exécuté après la fin des opérations
+                                    System.out.println("Fin du thread de retour du véhicule");
+                                    processingReturnVehicles.remove(vehicleId);
+                                }
+                            });
+                            vehicleThread.start();
+                        }
+                    }
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
+            Thread.sleep(5000);
+        }
 
     }
 
@@ -144,22 +344,12 @@ public class App {
         }
     }
 
-    private static <T> T putDataSensor(String apiUrl, String jsonInputString, Class<T> responseType) {
+    private static int returnInt(String apiUrl) {
         try {
             URL url = new URL(apiUrl);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("PUT");
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json; utf-8");
-            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestMethod("GET");
 
-            // Écriture des données JSON dans le corps de la requête
-            try (OutputStream os = connection.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
-
-            // Lecture de la réponse
             BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
             StringBuilder response = new StringBuilder();
             String line;
@@ -170,36 +360,22 @@ public class App {
 
             reader.close();
 
-            // Désérialisation de la réponse
             String apiResponse = response.toString();
-            ObjectMapper mapper = new ObjectMapper();
 
-            // Extraction et désérialisation de l'objet "oneSensor"
-            JsonNode rootNode = mapper.readTree(apiResponse);
-            JsonNode sensorNode = rootNode.path("oneSensor");
-            return mapper.treeToValue(sensorNode, responseType);
+            // Supposons que la réponse de l'API est un nombre entier sous forme de texte
+            return Integer.parseInt(apiResponse);
         } catch (Exception e) {
             e.printStackTrace();
-            return null; // ou une valeur par défaut appropriée
+            return -1; // Retourne une valeur par défaut en cas d'erreur, par exemple -1
         }
     }
 
-    private static <T> T putDataEvent(String apiUrl, String jsonInputString, Class<T> responseType) {
+    private static String fetchApiResponse(String apiUrl) {
         try {
             URL url = new URL(apiUrl);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("PUT");
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json; utf-8");
-            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestMethod("GET");
 
-            // Écriture des données JSON dans le corps de la requête
-            try (OutputStream os = connection.getOutputStream()) {
-                byte[] input = jsonInputString.getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
-
-            // Lecture de la réponse
             BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
             StringBuilder response = new StringBuilder();
             String line;
@@ -210,18 +386,10 @@ public class App {
 
             reader.close();
 
-            // Désérialisation de la réponse
-            String apiResponse = response.toString();
-            ObjectMapper mapper = new ObjectMapper();
-
-            // Extraction et désérialisation de l'objet "updatedEvent"
-            JsonNode rootNode = mapper.readTree(apiResponse);
-            JsonNode updatedEventNode = rootNode.path("updatedEvent");
-            return mapper.treeToValue(updatedEventNode, responseType);
+            return response.toString();
         } catch (Exception e) {
             e.printStackTrace();
-            return null; // ou une valeur par défaut appropriée
+            return null;
         }
     }
-
 }

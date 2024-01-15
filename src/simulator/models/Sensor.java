@@ -3,8 +3,10 @@ package simulator.models;
 import java.sql.Timestamp;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Sensor {
     @JsonProperty("id")
     private long id;
@@ -70,6 +72,10 @@ public class Sensor {
 
     public void setCreatedAt(Timestamp created_at) {
         this.created_at = created_at;
+    }
+
+    public List<EventSensor> getEvents() {
+        return this.events;
     }
 
     // getter to return latitude and longitude

@@ -16,7 +16,7 @@ public class ApiClient {
         this.objectMapper = new ObjectMapper();
     }
 
-    protected <T> List<T> getList(String apiUrl, Class<T[]> responseType) {
+    public <T> List<T> getList(String apiUrl, Class<T[]> responseType) {
         try {
             String apiResponse = fetchData(apiUrl, "GET");
             ObjectMapper mapper = new ObjectMapper();
@@ -39,10 +39,22 @@ public class ApiClient {
         }
     }
 
-    protected <T> T postOrPut(String apiUrl, Object requestBody, Class<T> responseType) {
+    public <T> T postOrPut(String apiUrl, Object requestBody, Class<T> responseType) {
         try {
             String requestBodyJson = convertObjectToJsonString(requestBody);
             String apiResponse = fetchDataWithBody(apiUrl, "POST", requestBodyJson);
+            ObjectMapper mapper = new ObjectMapper();
+            return mapper.readValue(apiResponse, responseType);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public <T> T Put(String apiUrl, Object requestBody, Class<T> responseType) {
+        try {
+            String requestBodyJson = convertObjectToJsonString(requestBody);
+            String apiResponse = fetchDataWithBody(apiUrl, "PUT", requestBodyJson);
             ObjectMapper mapper = new ObjectMapper();
             return mapper.readValue(apiResponse, responseType);
         } catch (Exception e) {
